@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,16 @@ import (
 var wrapperTemplate string
 
 const briefFile = "slack-interesting.md"
+
+type HookOutput struct {
+	Decision           string             `json:"decision"`
+	HookSpecificOutput HookSpecificOutput `json:"hookSpecificOutput"`
+}
+
+type HookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"`
+	AdditionalContext string `json:"additionalContext"`
+}
 
 func main() {
 	homeDir, err := os.UserHomeDir()
@@ -35,11 +46,25 @@ func main() {
 	content := string(data)
 
 	// Only show if there's interesting content
-	if !strings.Contains(content, "🌟") && !strings.Contains(content, "💡") && !strings.Contains(content, "🔗") {
+	if !strings.Contains(content, "🌟") && !strings.Contains(content, "💡") && !strings.Contains(content, "🔗") && !strings.Contains(content, "🔥") && !strings.Contains(content, "🎲") && !strings.Contains(content, "🤖") {
 		os.Exit(0)
 	}
 
-	// Output using embedded wrapper template
-	output := strings.ReplaceAll(wrapperTemplate, "{{BRIEF}}", content)
-	fmt.Print(output)
+	// Build the context message using wrapper template
+	contextMsg := strings.ReplaceAll(wrapperTemplate, "{{BRIEF}}", content)
+
+	// Output as JSON for Claude Code hooks
+	output := HookOutput{
+		Decision: "allow",
+		HookSpecificOutput: HookSpecificOutput{
+			HookEventName:     "SessionStart",
+			AdditionalContext: contextMsg,
+		},
+	}
+
+	jsonBytes, err := json.Marshal(output)
+	if err != nil {
+		os.Exit(0)
+	}
+	fmt.Print(string(jsonBytes))
 }

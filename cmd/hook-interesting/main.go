@@ -45,8 +45,8 @@ func main() {
 
 	content := string(data)
 
-	// Only show if there's interesting content
-	if !strings.Contains(content, "🌟") && !strings.Contains(content, "💡") && !strings.Contains(content, "🔗") && !strings.Contains(content, "🔥") && !strings.Contains(content, "🎲") && !strings.Contains(content, "🤖") {
+	// Only show if there's actual content (skip empty or placeholder files)
+	if len(strings.TrimSpace(content)) < 50 {
 		os.Exit(0)
 	}
 

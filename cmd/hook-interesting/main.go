@@ -15,7 +15,6 @@ var wrapperTemplate string
 const briefFile = "slack-interesting.md"
 
 type HookOutput struct {
-	Decision           string             `json:"decision"`
 	HookSpecificOutput HookSpecificOutput `json:"hookSpecificOutput"`
 }
 
@@ -55,7 +54,6 @@ func main() {
 
 	// Output as JSON for Claude Code hooks
 	output := HookOutput{
-		Decision: "allow",
 		HookSpecificOutput: HookSpecificOutput{
 			HookEventName:     "SessionStart",
 			AdditionalContext: contextMsg,

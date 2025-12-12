@@ -44,25 +44,20 @@ func main() {
 
 	briefPath := filepath.Join(homeDir, "THE_SINK", "docs", briefFile)
 
-	// No brief file = nothing to report
+	// Read the brief file - if it doesn't exist or is empty, exit silently
 	data, err := os.ReadFile(briefPath)
 	if err != nil {
-		log(homeDir, fmt.Sprintf("failed to read brief: %v", err))
-		os.Exit(0)
-	}
-	if len(data) == 0 {
-		log(homeDir, "brief file empty")
+		log(homeDir, fmt.Sprintf("no brief file: %v", err))
 		os.Exit(0)
 	}
 
-	content := string(data)
-	log(homeDir, fmt.Sprintf("brief content length: %d", len(content)))
-
-	// Only show if there's actual content (skip empty or placeholder files)
-	if len(strings.TrimSpace(content)) < 50 {
-		log(homeDir, "content too short, skipping")
+	content := strings.TrimSpace(string(data))
+	if len(content) < 20 {
+		log(homeDir, "brief too short, skipping")
 		os.Exit(0)
 	}
+
+	log(homeDir, fmt.Sprintf("brief length: %d chars", len(content)))
 
 	// Build the context message using wrapper template
 	contextMsg := strings.ReplaceAll(wrapperTemplate, "{{BRIEF}}", content)
@@ -81,6 +76,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	log(homeDir, fmt.Sprintf("output length: %d", len(jsonBytes)))
+	log(homeDir, fmt.Sprintf("output JSON length: %d", len(jsonBytes)))
 	fmt.Print(string(jsonBytes))
 }

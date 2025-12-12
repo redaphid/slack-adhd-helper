@@ -8,12 +8,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 //go:embed prompt.md
 var promptTemplate string
 
 const briefFile = "slack-critical.md"
+const reactionsFile = "slack-reactions.md"
 
 type HookOutput struct {
 	Decision           string           `json:"decision,omitempty"`
@@ -41,8 +43,17 @@ func main() {
 		previousBrief = string(data)
 	}
 
-	// Build prompt with previous brief
+	// Read user reactions to previously surfaced items
+	// (handled, dismissed, asked to be reminded, said not important, etc.)
+	reactionsPath := filepath.Join(homeDir, "THE_SINK", "docs", reactionsFile)
+	userReactions := "No reactions recorded yet."
+	if data, err := os.ReadFile(reactionsPath); err == nil && len(data) > 0 {
+		userReactions = string(data)
+	}
+
+	// Build prompt with previous brief and user reactions
 	prompt := strings.ReplaceAll(promptTemplate, "{{PREVIOUS_BRIEF}}", previousBrief)
+	prompt = strings.ReplaceAll(prompt, "{{USER_REACTIONS}}", userReactions)
 
 	// Run claude CLI with henchman tools
 	cmd := exec.Command("/opt/homebrew/bin/claude",
@@ -50,16 +61,57 @@ func main() {
 		"-p", prompt,
 	)
 
-	output, err := cmd.Output()
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+
+	// Log Claude's output to /tmp for debugging
+	logPath := "/tmp/slack-critical.log"
+	if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		timestamp := time.Now().Format("2006-01-02 15:04:05")
+		fmt.Fprintf(f, "\n=== %s ===\n", timestamp)
+		if stdout.Len() > 0 {
+			fmt.Fprintf(f, "Claude output:\n%s\n", stdout.String())
+		} else {
+			fmt.Fprintf(f, "Claude output: (empty)\n")
+		}
+		if stderr.Len() > 0 {
+			fmt.Fprintf(f, "Stderr:\n%s\n", stderr.String())
+		}
+		f.Close()
+	}
+
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error running claude: %v\n", err)
+		// Log to stderr for cron logs
+		fmt.Fprintf(os.Stderr, "Error running claude: %v\nStderr: %s\n", err, stderr.String())
+
+		// Write failure notice to brief file so the hook surfaces it
+		failureNotice := fmt.Sprintf(`## Slack Brief - FAILED TO UPDATE
+
+⚠️ **Slack check failed** - couldn't fetch latest messages
+   Error: %v
+   When: just now
+
+The previous brief (below) may be stale. Cron will retry in 15 minutes.
+
+---
+%s`, err, previousBrief)
+
+		os.WriteFile(briefPath, []byte(failureNotice), 0644)
 		os.Exit(1)
 	}
+
+	output := stdout.String()
 
 	result := strings.TrimSpace(string(output))
 
 	// Check for NO_UPDATE
 	if strings.Contains(result, "NO_UPDATE") {
+		// Touch the file so user can see when we last checked
+		now := time.Now()
+		os.Chtimes(briefPath, now, now)
 		os.Exit(0)
 	}
 

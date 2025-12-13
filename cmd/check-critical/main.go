@@ -17,6 +17,17 @@ var promptTemplate string
 const briefFile = "slack-critical.md"
 const reactionsFile = "slack-reactions.md"
 
+func getDocsDir() string {
+	if dir := os.Getenv("SLACK_PULSE_DOCS_DIR"); dir != "" {
+		return dir
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, "THE_SINK", "docs")
+}
+
 type HookOutput struct {
 	Decision           string           `json:"decision,omitempty"`
 	Reason             string           `json:"reason,omitempty"`
@@ -29,13 +40,13 @@ type HookSpecificData struct {
 }
 
 func main() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting home dir: %v\n", err)
+	docsDir := getDocsDir()
+	if docsDir == "" {
+		fmt.Fprintf(os.Stderr, "Error: Could not determine docs directory\n")
 		os.Exit(1)
 	}
 
-	briefPath := filepath.Join(homeDir, "THE_SINK", "docs", briefFile)
+	briefPath := filepath.Join(docsDir, briefFile)
 
 	// Read previous brief
 	previousBrief := "No previous brief - first run."
@@ -45,7 +56,7 @@ func main() {
 
 	// Read user reactions to previously surfaced items
 	// (handled, dismissed, asked to be reminded, said not important, etc.)
-	reactionsPath := filepath.Join(homeDir, "THE_SINK", "docs", reactionsFile)
+	reactionsPath := filepath.Join(docsDir, reactionsFile)
 	userReactions := "No reactions recorded yet."
 	if data, err := os.ReadFile(reactionsPath); err == nil && len(data) > 0 {
 		userReactions = string(data)
@@ -65,7 +76,7 @@ func main() {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err = cmd.Run()
+	err := cmd.Run()
 
 	// Log Claude's output to /tmp for debugging
 	logPath := "/tmp/slack-critical.log"

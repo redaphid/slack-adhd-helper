@@ -15,6 +15,17 @@ var wrapperTemplate string
 
 const briefFile = "slack-critical.md"
 
+func getDocsDir() string {
+	if dir := os.Getenv("SLACK_PULSE_DOCS_DIR"); dir != "" {
+		return dir
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, "THE_SINK", "docs")
+}
+
 type HookOutput struct {
 	HookSpecificOutput HookSpecificOutput `json:"hookSpecificOutput"`
 }
@@ -35,14 +46,15 @@ func log(homeDir, msg string) {
 }
 
 func main() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
+	docsDir := getDocsDir()
+	if docsDir == "" {
 		os.Exit(0)
 	}
 
+	homeDir, _ := os.UserHomeDir()
 	log(homeDir, "hook started")
 
-	briefPath := filepath.Join(homeDir, "THE_SINK", "docs", briefFile)
+	briefPath := filepath.Join(docsDir, briefFile)
 
 	// Read the brief file - if it doesn't exist or is empty, exit silently
 	data, err := os.ReadFile(briefPath)

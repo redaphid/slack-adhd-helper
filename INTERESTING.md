@@ -26,7 +26,7 @@ mcp__henchman__search
 ### 2. Semantic discovery - find content matching my interests
 ```
 mcp__henchman__search
-  query: "Claude MCP agents automation AI tools"
+  query: "Claude MCP agents automation AI tools architecture system design"
   likeUser: ["hypnodroid"]
   excludeChannels: ["sst-errors", "bot-alerts", "guzzle", "intercom-alerts"]
   since: "48h"
@@ -53,7 +53,8 @@ mcp__henchman__search
 Use getThreadDetails for any threads that look particularly interesting!
 
 ## Context - @hypnodroid's Interests
-- MCP servers, Claude, AI agents
+- MCP servers, Claude, AI agents, agentic workflows
+- Architecture discussions, system design, design patterns
 - Cloudflare workers, edge computing
 - GraphQL, API design
 - Developer tooling, automation

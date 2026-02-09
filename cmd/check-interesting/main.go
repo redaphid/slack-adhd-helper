@@ -66,7 +66,7 @@ func main() {
 
 	// Run claude CLI with henchman tools
 	cmd := exec.Command("/opt/homebrew/bin/claude",
-		"--allowedTools", "mcp__henchman__search,mcp__henchman__getThreadDetails,mcp__henchman__channelLookup,mcp__henchman__userLookup",
+		"--allowedTools", "Bash,mcp__henchman__search,mcp__henchman__getThreadDetails,mcp__henchman__channelLookup,mcp__henchman__userLookup",
 		"-p", prompt,
 	)
 
@@ -93,21 +93,21 @@ func main() {
 	}
 
 	if err != nil {
-		// Log to stderr for cron logs
-		fmt.Fprintf(os.Stderr, "Error running claude: %v\nStderr: %s\n", err, stderr.String())
+		timestamp := time.Now().Format("2006-01-02 15:04:05")
 
-		// Write failure notice to brief file so the hook surfaces it
-		failureNotice := fmt.Sprintf(`## Slack Brief - FAILED TO UPDATE
+		// Log error to separate error log
+		errLogPath := "/tmp/slack-adhd-errors.log"
+		if f, err2 := os.OpenFile(errLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
+			fmt.Fprintf(f, "%s | check-interesting | %v | %s\n", timestamp, err, stderr.String())
+			f.Close()
+		}
 
-⚠️ **Slack check failed** - couldn't fetch latest messages
-   Error: %v
-   When: just now
-
-The previous brief (below) may be stale. Cron will retry in 15 minutes.
-
----
-%s`, err, previousBrief)
-
+		// Write a flat error notice (no nesting of previous brief)
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		failureNotice := fmt.Sprintf("⚠️ Slack check failed at %s: %s", timestamp, errMsg)
 		os.WriteFile(briefPath, []byte(failureNotice), 0644)
 		os.Exit(1)
 	}
@@ -117,9 +117,31 @@ The previous brief (below) may be stale. Cron will retry in 15 minutes.
 
 	// Check for NO_UPDATE
 	if strings.Contains(result, "NO_UPDATE") {
-		// Touch the file so user can see when we last checked
-		now := time.Now()
-		os.Chtimes(briefPath, now, now)
+		// Claude says the previous brief is still valid - keep it but strip any error headers
+		cleanBrief := previousBrief
+
+		// Strip "FAILED TO UPDATE" header if present
+		if strings.Contains(cleanBrief, "## Slack Brief - FAILED TO UPDATE") {
+			// Find the separator line
+			parts := strings.Split(cleanBrief, "---")
+			if len(parts) >= 2 {
+				// Keep everything after the first separator (the actual content)
+				cleanBrief = strings.TrimSpace(strings.Join(parts[1:], "---"))
+			}
+		}
+
+		// If there's no good content left, write "all clear"
+		if cleanBrief == "" || cleanBrief == "No previous brief - first run." || len(cleanBrief) < 50 {
+			now := time.Now()
+			cleanBrief = fmt.Sprintf(`Nothing particularly interesting in the past 48 hours - all quiet!
+
+Last checked: %s`, now.Format("2006-01-02 15:04 MST"))
+		}
+
+		if err := os.WriteFile(briefPath, []byte(cleanBrief), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing clean brief: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 

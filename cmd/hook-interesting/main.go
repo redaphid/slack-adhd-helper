@@ -14,16 +14,81 @@ import (
 var wrapperTemplate string
 
 const briefFile = "slack-interesting.md"
+const dismissedFile = "dismissed-urls.txt"
+const defaultBaseFolder = "THE_SINK/docs"
 
 func getDocsDir() string {
-	if dir := os.Getenv("SLACK_PULSE_DOCS_DIR"); dir != "" {
+	// Full path override takes precedence
+	if dir := os.Getenv("SLACK_ADHD_DOCS_DIR"); dir != "" {
 		return dir
 	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(homeDir, "THE_SINK", "docs")
+	// Allow overriding just the relative folder (defaults to THE_SINK/docs)
+	baseFolder := os.Getenv("SLACK_ADHD_BASE_FOLDER")
+	if baseFolder == "" {
+		baseFolder = defaultBaseFolder
+	}
+	return filepath.Join(homeDir, baseFolder)
+}
+
+func loadDismissedURLs(docsDir string) map[string]bool {
+	dismissedPath := filepath.Join(docsDir, dismissedFile)
+	content, err := os.ReadFile(dismissedPath)
+	if err != nil {
+		return nil
+	}
+
+	dismissed := make(map[string]bool)
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			dismissed[line] = true
+		}
+	}
+	return dismissed
+}
+
+func filterBrief(brief string, dismissed map[string]bool) string {
+	if len(dismissed) == 0 {
+		return brief
+	}
+
+	lines := strings.Split(brief, "\n")
+	var filtered []string
+	skip := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// New item starts with emoji - reset skip state
+		if strings.HasPrefix(trimmed, "🌟") ||
+			strings.HasPrefix(trimmed, "💡") ||
+			strings.HasPrefix(trimmed, "🔥") ||
+			strings.HasPrefix(trimmed, "🔗") {
+			skip = false
+		}
+
+		// Check if this line contains a dismissed URL
+		for url := range dismissed {
+			if strings.Contains(line, url) {
+				skip = true
+				break
+			}
+		}
+
+		if !skip {
+			filtered = append(filtered, line)
+		}
+	}
+
+	result := strings.TrimSpace(strings.Join(filtered, "\n"))
+	if result == "" || len(result) < 20 {
+		return ""
+	}
+	return result
 }
 
 type HookOutput struct {
@@ -67,6 +132,17 @@ func main() {
 	if len(content) < 20 {
 		log(homeDir, "brief too short, skipping")
 		os.Exit(0)
+	}
+
+	// Filter out dismissed URLs
+	dismissed := loadDismissedURLs(docsDir)
+	if len(dismissed) > 0 {
+		log(homeDir, fmt.Sprintf("loaded %d dismissed URLs", len(dismissed)))
+		content = filterBrief(content, dismissed)
+		if content == "" {
+			log(homeDir, "all items dismissed, skipping")
+			os.Exit(0)
+		}
 	}
 
 	log(homeDir, fmt.Sprintf("brief length: %d chars", len(content)))

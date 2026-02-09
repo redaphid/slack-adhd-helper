@@ -6,7 +6,9 @@
 
 ---
 
-**RECORDING REACTIONS:** When the user responds to these items, append a timestamped entry to `~/THE_SINK/docs/slack-reactions.md`:
+**IMMEDIATE DISMISSAL:** When the user dismisses an item, append its Slack URL to `~/THE_SINK/docs/dismissed-urls.txt` (one URL per line). This immediately prevents it from appearing in future prompts.
+
+**RECORDING REACTIONS:** When the user responds to these items, also append a timestamped entry to `~/THE_SINK/docs/slack-reactions.md`:
 
 ```markdown
 ## YYYY-MM-DD HH:MM

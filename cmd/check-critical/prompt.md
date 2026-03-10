@@ -37,11 +37,20 @@ mcp__henchman__search
 ```
 This identifies what's already been handled.
 
-### 2. Direct questions/mentions
+### 2. Direct @mentions (by Slack user ID)
 ```
 mcp__henchman__search
-  query: "hypnodroid"
-  excludeChannels: ["sst-errors", "bot-alerts", "guzzle"]
+  textQuery: "U068ZPGDB0S"
+  excludeChannels: ["sst-errors", "bot-alerts", "guzzle", "field-activity"]
+  since: "48h"
+```
+This catches actual @mentions. Slack stores them as `<@U068ZPGDB0S>`.
+
+### 2b. Semantic mentions (name references without @)
+```
+mcp__henchman__search
+  query: "aaron hypnodroid"
+  excludeChannels: ["sst-errors", "bot-alerts", "guzzle", "field-activity"]
   since: "24h"
 ```
 

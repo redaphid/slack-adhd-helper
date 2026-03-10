@@ -38,6 +38,8 @@ type HookSpecificData struct {
 }
 
 func main() {
+	homeDir, _ := os.UserHomeDir()
+
 	docsDir := getDocsDir()
 	if docsDir == "" {
 		fmt.Fprintf(os.Stderr, "Error: Could not determine docs directory\n")
@@ -65,7 +67,8 @@ func main() {
 	prompt = strings.ReplaceAll(prompt, "{{USER_REACTIONS}}", userReactions)
 
 	// Run claude CLI with henchman tools
-	cmd := exec.Command("/opt/homebrew/bin/claude",
+	claudePath := filepath.Join(homeDir, ".local", "bin", "claude")
+	cmd := exec.Command(claudePath,
 		"--allowedTools", "Bash,mcp__henchman__search,mcp__henchman__getThreadDetails,mcp__henchman__channelLookup,mcp__henchman__userLookup",
 		"-p", prompt,
 	)
@@ -115,19 +118,33 @@ func main() {
 	output := stdout.String()
 	result := strings.TrimSpace(output)
 
+	// Detect Henchman MCP failure - even if Claude says NO_UPDATE
+	henchmanDown := strings.Contains(strings.ToLower(result), "henchman") &&
+		(strings.Contains(strings.ToLower(result), "not connected") ||
+			strings.Contains(strings.ToLower(result), "not available") ||
+			strings.Contains(strings.ToLower(result), "isn't connected") ||
+			strings.Contains(strings.ToLower(result), "no henchman"))
+	if henchmanDown {
+		now := time.Now()
+		warning := fmt.Sprintf("⚠️ **Henchman MCP is unreachable** — Slack checks are not running. You may need to re-authenticate.\n\nLast attempted: %s", now.Format("2006-01-02 15:04 MST"))
+		os.WriteFile(briefPath, []byte(warning), 0644)
+		os.Exit(0)
+	}
+
 	// Check for NO_UPDATE
 	if strings.Contains(result, "NO_UPDATE") {
 		// Claude says the previous brief is still valid - keep it but strip any error headers
 		cleanBrief := previousBrief
 
-		// Strip "FAILED TO UPDATE" header if present
+		// Strip error messages from previous brief
 		if strings.Contains(cleanBrief, "## Slack Brief - FAILED TO UPDATE") {
-			// Find the separator line
 			parts := strings.Split(cleanBrief, "---")
 			if len(parts) >= 2 {
-				// Keep everything after the first separator (the actual content)
 				cleanBrief = strings.TrimSpace(strings.Join(parts[1:], "---"))
 			}
+		}
+		if strings.HasPrefix(cleanBrief, "⚠️") {
+			cleanBrief = ""
 		}
 
 		// If there's no good content left, write "all clear"

@@ -33,3 +33,4 @@ tmp/
 *.log
 .env
 .envrc
+.env

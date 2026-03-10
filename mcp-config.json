@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "henchman": {
+      "type": "http",
+      "url": "https://hack.sibi.fun/api/henchman-mcp/mcp"
+    }
+  }
+}

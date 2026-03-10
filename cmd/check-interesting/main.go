@@ -119,11 +119,13 @@ func main() {
 	result := strings.TrimSpace(output)
 
 	// Detect Henchman MCP failure - even if Claude says NO_UPDATE
-	henchmanDown := strings.Contains(strings.ToLower(result), "henchman") &&
-		(strings.Contains(strings.ToLower(result), "not connected") ||
-			strings.Contains(strings.ToLower(result), "not available") ||
-			strings.Contains(strings.ToLower(result), "isn't connected") ||
-			strings.Contains(strings.ToLower(result), "no henchman"))
+	resultLower := strings.ToLower(result)
+	henchmanDown := strings.Contains(result, "HENCHMAN_UNAVAILABLE") ||
+		(strings.Contains(resultLower, "henchman") &&
+			(strings.Contains(resultLower, "not connected") ||
+				strings.Contains(resultLower, "not available") ||
+				strings.Contains(resultLower, "isn't connected") ||
+				strings.Contains(resultLower, "no henchman")))
 	if henchmanDown {
 		now := time.Now()
 		warning := fmt.Sprintf("⚠️ **Henchman MCP is unreachable** — Slack checks are not running. You may need to re-authenticate.\n\nLast attempted: %s", now.Format("2006-01-02 15:04 MST"))

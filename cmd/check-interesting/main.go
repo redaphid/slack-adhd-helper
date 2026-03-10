@@ -68,13 +68,11 @@ func main() {
 
 	// Run claude CLI with henchman tools
 	claudePath := filepath.Join(homeDir, ".local", "bin", "claude")
-	mcpConfig := filepath.Join(homeDir, "tools", "check-slack-for-relevant-stuff", "mcp-config.json")
 	cmd := exec.Command(claudePath,
-		"--mcp-config", mcpConfig,
-		"--strict-mcp-config",
 		"--allowedTools", "Bash,mcp__henchman__search,mcp__henchman__getThreadDetails,mcp__henchman__channelLookup,mcp__henchman__userLookup",
 		"-p", prompt,
 	)
+	cmd.Dir = homeDir
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout

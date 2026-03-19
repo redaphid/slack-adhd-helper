@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,6 +35,22 @@ func getDocsDir() string {
 	return filepath.Join(homeDir, baseFolder)
 }
 
+const dismissalTTL = 48 * time.Hour
+
+// slackMsgTime extracts the send-time from a Slack message URL.
+// Slack encodes Unix seconds in the path: /archives/CXXX/pSSSSSSSSSSmmmmmm
+func slackMsgTime(url string) (time.Time, bool) {
+	idx := strings.LastIndex(url, "/p")
+	if idx == -1 || len(url)-idx < 12 {
+		return time.Time{}, false
+	}
+	secs, err := strconv.ParseInt(url[idx+2:idx+12], 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(secs, 0), true
+}
+
 func loadDismissedURLs(docsDir string) map[string]bool {
 	dismissedPath := filepath.Join(docsDir, dismissedFile)
 	content, err := os.ReadFile(dismissedPath)
@@ -41,14 +58,60 @@ func loadDismissedURLs(docsDir string) map[string]bool {
 		return nil
 	}
 
+	now := time.Now()
 	dismissed := make(map[string]bool)
-	for _, line := range strings.Split(string(content), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			dismissed[line] = true
+	var keepLines []string
+	changed := false
+
+	for _, rawLine := range strings.Split(string(content), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			changed = true
+			continue
 		}
+
+		parts := strings.SplitN(line, " ", 2)
+		url := parts[0]
+
+		// Determine age: prefer explicit timestamp, fall back to Slack message time
+		var age time.Duration
+		if len(parts) == 2 {
+			if t, err := time.Parse(time.RFC3339, parts[1]); err == nil {
+				age = now.Sub(t)
+			}
+		}
+		if age == 0 {
+			if t, ok := slackMsgTime(url); ok {
+				age = now.Sub(t)
+			}
+		}
+
+		if age > dismissalTTL {
+			changed = true
+			continue
+		}
+
+		keepLines = append(keepLines, line)
+		dismissed[url] = true
 	}
+
+	if changed {
+		newContent := strings.Join(keepLines, "\n")
+		if len(keepLines) > 0 {
+			newContent += "\n"
+		}
+		os.WriteFile(dismissedPath, []byte(newContent), 0644)
+	}
+
 	return dismissed
+}
+
+func isItemStart(line string) bool {
+	t := strings.TrimSpace(line)
+	return strings.HasPrefix(t, "🌟") ||
+		strings.HasPrefix(t, "💡") ||
+		strings.HasPrefix(t, "🔥") ||
+		strings.HasPrefix(t, "🔗")
 }
 
 func filterBrief(brief string, dismissed map[string]bool) string {
@@ -57,30 +120,46 @@ func filterBrief(brief string, dismissed map[string]bool) string {
 	}
 
 	lines := strings.Split(brief, "\n")
-	var filtered []string
-	skip := false
+
+	// Two-pass: group into preamble + item blocks, then drop entire blocks
+	// that contain a dismissed URL anywhere (not just after the link line).
+	type block struct {
+		lines      []string
+		hasDismiss bool
+	}
+
+	var preamble []string
+	var blocks []block
+	var cur *block
 
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// New item starts with emoji - reset skip state
-		if strings.HasPrefix(trimmed, "🌟") ||
-			strings.HasPrefix(trimmed, "💡") ||
-			strings.HasPrefix(trimmed, "🔥") ||
-			strings.HasPrefix(trimmed, "🔗") {
-			skip = false
+		if isItemStart(line) {
+			if cur != nil {
+				blocks = append(blocks, *cur)
+			}
+			cur = &block{}
 		}
-
-		// Check if this line contains a dismissed URL
+		if cur == nil {
+			preamble = append(preamble, line)
+			continue
+		}
+		cur.lines = append(cur.lines, line)
 		for url := range dismissed {
 			if strings.Contains(line, url) {
-				skip = true
+				cur.hasDismiss = true
 				break
 			}
 		}
+	}
+	if cur != nil {
+		blocks = append(blocks, *cur)
+	}
 
-		if !skip {
-			filtered = append(filtered, line)
+	var filtered []string
+	filtered = append(filtered, preamble...)
+	for _, b := range blocks {
+		if !b.hasDismiss {
+			filtered = append(filtered, b.lines...)
 		}
 	}
 

@@ -62,8 +62,14 @@ func main() {
 		userReactions = string(data)
 	}
 
+	// Strip stale error/warning messages from previous brief before feeding to Claude
+	cleanPrevious := previousBrief
+	if strings.HasPrefix(cleanPrevious, "⚠️") {
+		cleanPrevious = "No previous brief - previous check had an error."
+	}
+
 	// Build prompt with previous brief and user reactions
-	prompt := strings.ReplaceAll(promptTemplate, "{{PREVIOUS_BRIEF}}", previousBrief)
+	prompt := strings.ReplaceAll(promptTemplate, "{{PREVIOUS_BRIEF}}", cleanPrevious)
 	prompt = strings.ReplaceAll(prompt, "{{USER_REACTIONS}}", userReactions)
 
 	// Run claude CLI with henchman tools
@@ -126,6 +132,7 @@ func main() {
 			(strings.Contains(resultLower, "not connected") ||
 				strings.Contains(resultLower, "not available") ||
 				strings.Contains(resultLower, "isn't connected") ||
+				strings.Contains(resultLower, "unreachable") ||
 				strings.Contains(resultLower, "no henchman")))
 	if henchmanDown {
 		now := time.Now()

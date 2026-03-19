@@ -6,7 +6,7 @@
 
 ---
 
-**IMMEDIATE DISMISSAL:** When the user dismisses an item, append its Slack URL to `~/THE_SINK/docs/dismissed-urls.txt` (one URL per line). This immediately prevents it from appearing in future prompts.
+**IMMEDIATE DISMISSAL:** When the user dismisses an item, append `URL ISO8601_TIMESTAMP` (e.g. `https://... 2026-03-18T20:00:00Z`) to `~/THE_SINK/docs/dismissed-urls.txt`. Use current UTC time. Dismissals expire after 48h automatically.
 
 **RECORDING REACTIONS:** When the user responds to these items, also append a timestamped entry to `~/THE_SINK/docs/slack-reactions.md`:
 

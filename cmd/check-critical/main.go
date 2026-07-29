@@ -17,6 +17,10 @@ var promptTemplate string
 const briefFile = "slack-critical.md"
 const reactionsFile = "slack-reactions.md"
 
+// A failure notice is injected into every prompt until the next successful run,
+// so keep it short even when the CLI dumps a wall of output.
+const maxErrMsgLen = 400
+
 func getDocsDir() string {
 	if dir := os.Getenv("SLACK_PULSE_DOCS_DIR"); dir != "" {
 		return dir
@@ -110,14 +114,22 @@ func main() {
 		// Log error to separate error log
 		errLogPath := "/tmp/slack-adhd-errors.log"
 		if f, err2 := os.OpenFile(errLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
-			fmt.Fprintf(f, "%s | check-critical | %v | %s\n", timestamp, err, stderr.String())
+			fmt.Fprintf(f, "%s | check-critical | %v | stderr: %s | stdout: %s\n", timestamp, err, stderr.String(), stdout.String())
 			f.Close()
 		}
 
-		// Write a flat error notice (no nesting of previous brief)
+		// Write a flat error notice (no nesting of previous brief).
+		// The claude CLI reports its own failures (spend limit, auth) on stdout,
+		// not stderr, so check both before falling back to a bare "exit status 1".
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg == "" {
+			errMsg = strings.TrimSpace(stdout.String())
+		}
+		if errMsg == "" {
 			errMsg = err.Error()
+		}
+		if runes := []rune(errMsg); len(runes) > maxErrMsgLen {
+			errMsg = string(runes[:maxErrMsgLen]) + "… (full output in " + logPath + ")"
 		}
 		failureNotice := fmt.Sprintf("⚠️ Slack check failed at %s: %s", timestamp, errMsg)
 		os.WriteFile(briefPath, []byte(failureNotice), 0644)
